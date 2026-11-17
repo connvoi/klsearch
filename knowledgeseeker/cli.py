@@ -32,7 +32,7 @@ def cmd_collect(args) -> int:
     total_saved = total_skipped = 0
     with Storage(args.db) as storage:
         for source, collector in sources:
-            saved, skipped = collector(source, storage)
+            saved, skipped = collector(source, storage, refresh=args.refresh)
             total_saved += saved
             total_skipped += skipped
             print(f"{source.name}: 新規 {saved} 件 / スキップ {skipped} 件")
@@ -109,6 +109,11 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("collect", help="sources.yaml の全ソースから記事を収集する")
     p.add_argument("--source", help="このソース名だけ収集する")
     p.add_argument("--config", help="設定ファイルのパス (既定: sources.yaml)")
+    p.add_argument(
+        "--refresh",
+        action="store_true",
+        help="既存の記事も再取得して上書き更新する",
+    )
     p.set_defaults(func=cmd_collect)
 
     p = sub.add_parser("search", help="収集済み記事を全文検索する")

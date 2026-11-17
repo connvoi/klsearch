@@ -77,22 +77,37 @@ class Storage:
         ).fetchone()
         return row is not None
 
-    def save(self, article: Article) -> bool:
-        """保存する。URL が既存なら False(スキップ)。"""
+    def save(self, article: Article, replace: bool = False) -> bool:
+        """保存する。URL が既存なら False(スキップ)。replace=True なら上書き更新。"""
         now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+        params = (
+            article.source,
+            article.title,
+            article.url,
+            article.published,
+            now,
+            article.content,
+        )
+        if replace:
+            with self.conn:
+                self.conn.execute(
+                    "INSERT INTO articles (source, title, url, published, fetched_at, content)"
+                    " VALUES (?, ?, ?, ?, ?, ?)"
+                    " ON CONFLICT(url) DO UPDATE SET"
+                    "   source = excluded.source,"
+                    "   title = excluded.title,"
+                    "   published = COALESCE(excluded.published, articles.published),"
+                    "   fetched_at = excluded.fetched_at,"
+                    "   content = excluded.content",
+                    params,
+                )
+            return True
         try:
             with self.conn:
                 self.conn.execute(
                     "INSERT INTO articles (source, title, url, published, fetched_at, content)"
                     " VALUES (?, ?, ?, ?, ?, ?)",
-                    (
-                        article.source,
-                        article.title,
-                        article.url,
-                        article.published,
-                        now,
-                        article.content,
-                    ),
+                    params,
                 )
             return True
         except sqlite3.IntegrityError:

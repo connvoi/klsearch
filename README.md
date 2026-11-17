@@ -21,6 +21,9 @@ python -m knowledgeseeker collect
 # 特定ソースのみ収集
 python -m knowledgeseeker collect --source simonwillison
 
+# 既存の記事も再取得して上書き(セレクタ修正後やネットワーク設定変更後に)
+python -m knowledgeseeker collect --source ycombinator --refresh
+
 # 全文検索
 python -m knowledgeseeker search "prompt injection"
 
@@ -59,5 +62,6 @@ web:
 - 1 ソースあたりの取得は最大 50 記事、リクエスト間隔は 1 秒です
   (`knowledgeseeker/collectors.py`, `knowledgeseeker/fetch.py` で調整可)。
 - Hacker News などリンク先が外部サイトになるフィードは、実行環境の
-  ネットワークポリシーによっては全文取得がスキップされ、タイトルと URL のみ
-  保存されます。
+  ネットワークポリシーで全ホストへのアクセスが許可されている必要があります。
+  許可されていない場合や、リンク先サイトがボットアクセスを拒否 (403) する場合は、
+  タイトルと URL のみ保存されます。後から `--refresh` で全文を取り直せます。

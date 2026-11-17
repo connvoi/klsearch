@@ -20,8 +20,13 @@ FULL_CONTENT_THRESHOLD = 500
 MAX_ARTICLES_PER_SOURCE = 50
 
 
-def collect_rss(source: RssSource, storage: Storage) -> tuple[int, int]:
-    """RSS ソースを収集。(新規保存数, スキップ数) を返す。"""
+def collect_rss(
+    source: RssSource, storage: Storage, refresh: bool = False
+) -> tuple[int, int]:
+    """RSS ソースを収集。(新規保存数, スキップ数) を返す。
+
+    refresh=True の場合、既存 URL も再取得して上書き更新する。
+    """
     logger.info("[%s] フィード取得: %s", source.name, source.url)
     xml_text = fetch_text(source.url)
     if xml_text is None:
@@ -33,7 +38,7 @@ def collect_rss(source: RssSource, storage: Storage) -> tuple[int, int]:
 
     saved = skipped = 0
     for entry in entries[:MAX_ARTICLES_PER_SOURCE]:
-        if storage.has_url(entry.url):
+        if not refresh and storage.has_url(entry.url):
             skipped += 1
             continue
         content = html_to_text(entry.summary) if entry.summary else ""
@@ -50,7 +55,7 @@ def collect_rss(source: RssSource, storage: Storage) -> tuple[int, int]:
             published=entry.published,
             content=content,
         )
-        if storage.save(article):
+        if storage.save(article, replace=refresh):
             saved += 1
             logger.info("[%s] 保存: %s", source.name, entry.title)
         else:
@@ -58,8 +63,13 @@ def collect_rss(source: RssSource, storage: Storage) -> tuple[int, int]:
     return (saved, skipped)
 
 
-def collect_web(source: WebSource, storage: Storage) -> tuple[int, int]:
-    """Web ページソースを収集。(新規保存数, スキップ数) を返す。"""
+def collect_web(
+    source: WebSource, storage: Storage, refresh: bool = False
+) -> tuple[int, int]:
+    """Web ページソースを収集。(新規保存数, スキップ数) を返す。
+
+    refresh=True の場合、既存 URL も再取得して上書き更新する。
+    """
     logger.info("[%s] ページ取得: %s", source.name, source.url)
     html = fetch_text(source.url)
     if html is None:
@@ -68,7 +78,7 @@ def collect_web(source: WebSource, storage: Storage) -> tuple[int, int]:
 
     if not source.selector:
         # セレクタなし: ページ全体を1つの記事として扱う
-        if storage.has_url(source.url):
+        if not refresh and storage.has_url(source.url):
             return (0, 1)
         article = Article(
             source=source.name,
@@ -77,7 +87,7 @@ def collect_web(source: WebSource, storage: Storage) -> tuple[int, int]:
             published=None,
             content=extract_main_text(html),
         )
-        return (1, 0) if storage.save(article) else (0, 1)
+        return (1, 0) if storage.save(article, replace=refresh) else (0, 1)
 
     soup = BeautifulSoup(html, "lxml")
     elements = _select(soup, source.selector)
@@ -91,7 +101,7 @@ def collect_web(source: WebSource, storage: Storage) -> tuple[int, int]:
     links = _harvest_links(elements, base_url=source.url)
     if not links:
         # リンクがなければ要素のテキスト自体を記事として保存
-        if storage.has_url(source.url):
+        if not refresh and storage.has_url(source.url):
             return (0, 1)
         text = "\n\n".join(html_to_text(str(el)) for el in elements)
         article = Article(
@@ -101,11 +111,11 @@ def collect_web(source: WebSource, storage: Storage) -> tuple[int, int]:
             published=None,
             content=text,
         )
-        return (1, 0) if storage.save(article) else (0, 1)
+        return (1, 0) if storage.save(article, replace=refresh) else (0, 1)
 
     saved = skipped = 0
     for url, link_text in links[:MAX_ARTICLES_PER_SOURCE]:
-        if storage.has_url(url):
+        if not refresh and storage.has_url(url):
             skipped += 1
             continue
         page = fetch_text(url)
@@ -119,7 +129,7 @@ def collect_web(source: WebSource, storage: Storage) -> tuple[int, int]:
             published=None,
             content=extract_main_text(page),
         )
-        if storage.save(article):
+        if storage.save(article, replace=refresh):
             saved += 1
             logger.info("[%s] 保存: %s", source.name, title)
         else:
