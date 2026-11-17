@@ -20,9 +20,11 @@ rss:
 
 web:
   # 例: 特定のWebページを収集
+  # 注意: anthropic.com はビルドごとにクラス名のハッシュが変わることがある。
+  # 収集で「セレクタに一致する要素がありません」と出たらページを確認して更新する。
   - name: "anthropic"
     url: "https://www.anthropic.com/news/"
-    selector: "PublicationList-module-scss-module__KxYrHG__list"  # CSSセレクタで記事要素を指定
+    selector: "_2Zn0cq_container"  # 記事リストのコンテナ (2026-11 時点)
 
   # 例: 特定のWebページを収集
   # - name: "Example Blog"
