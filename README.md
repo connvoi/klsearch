@@ -31,7 +31,20 @@ python -m knowledgeseeker search "prompt injection"
 python -m knowledgeseeker list --limit 30
 python -m knowledgeseeker show 12
 python -m knowledgeseeker stats
+
+# 新着記事のデイリーダイジェスト (digests/YYYY-MM-DD.md) を生成
+python -m knowledgeseeker digest            # 過去24時間の新着が対象
+python -m knowledgeseeker digest --hours 6  # 対象期間を変更
 ```
+
+## データの永続化とデイリーログ
+
+- 記事データは `data/articles.jsonl` に書き出され、git で管理されます
+  (`collect` 実行時に自動で import / export)。SQLite DB (`data/articles.db`)
+  は検索用のローカルキャッシュで、JSONL から自動復元されます。
+- `digest` は新着記事のまとめを `digests/YYYY-MM-DD.md` に生成します。
+  「## ハイライト」節はプレースホルダになっており、定期実行時に Claude が
+  テーマ別の要約を記入します。手動で `export` / `import` も実行できます。
 
 記事は `data/articles.db` (SQLite) に保存されます。`--db PATH` で変更できます。
 `-v` で収集時の詳細ログを表示します。

@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 DEFAULT_DB_PATH = Path(__file__).resolve().parent.parent / "data" / "articles.db"
+DEFAULT_JSONL_PATH = Path(__file__).resolve().parent.parent / "data" / "articles.jsonl"
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS articles (
@@ -149,6 +150,58 @@ class Storage:
         return self.conn.execute(
             "SELECT * FROM articles WHERE id = ?", (article_id,)
         ).fetchone()
+
+    def fetched_since(self, cutoff_iso: str) -> list[sqlite3.Row]:
+        """cutoff (ISO 8601, UTC) 以降に取得した記事を返す。"""
+        return self.conn.execute(
+            "SELECT id, source, title, url, published, fetched_at,"
+            "       length(content) AS content_len, substr(content, 1, 400) AS head"
+            " FROM articles WHERE fetched_at >= ?"
+            " ORDER BY source, COALESCE(published, fetched_at) DESC",
+            (cutoff_iso,),
+        ).fetchall()
+
+    def export_jsonl(self, path: str | Path) -> int:
+        """全記事を JSONL に書き出す (id 順、1行1記事)。件数を返す。"""
+        import json
+
+        path = Path(path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        rows = self.conn.execute("SELECT * FROM articles ORDER BY id").fetchall()
+        with open(path, "w", encoding="utf-8") as f:
+            for row in rows:
+                f.write(json.dumps(dict(row), ensure_ascii=False) + "\n")
+        return len(rows)
+
+    def import_jsonl(self, path: str | Path) -> int:
+        """JSONL から記事を取り込む。URL 既存の行はスキップ。新規件数を返す。"""
+        import json
+
+        path = Path(path)
+        if not path.exists():
+            return 0
+        added = 0
+        with open(path, encoding="utf-8") as f, self.conn:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                row = json.loads(line)
+                cur = self.conn.execute(
+                    "INSERT OR IGNORE INTO articles"
+                    " (source, title, url, published, fetched_at, content)"
+                    " VALUES (?, ?, ?, ?, ?, ?)",
+                    (
+                        row["source"],
+                        row["title"],
+                        row["url"],
+                        row.get("published"),
+                        row["fetched_at"],
+                        row.get("content", ""),
+                    ),
+                )
+                added += cur.rowcount
+        return added
 
     def stats(self) -> list[sqlite3.Row]:
         return self.conn.execute(

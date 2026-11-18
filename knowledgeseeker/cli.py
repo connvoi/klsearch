@@ -14,7 +14,8 @@ import sys
 
 from .collectors import collect_rss, collect_web
 from .config import load_config
-from .storage import Storage
+from .digest import write_digest
+from .storage import DEFAULT_JSONL_PATH, Storage
 
 
 def cmd_collect(args) -> int:
@@ -31,12 +32,45 @@ def cmd_collect(args) -> int:
 
     total_saved = total_skipped = 0
     with Storage(args.db) as storage:
+        # git 管理の JSONL があれば取り込む (コンテナ再作成後の DB 復元)
+        imported = storage.import_jsonl(DEFAULT_JSONL_PATH)
+        if imported:
+            print(f"articles.jsonl から {imported} 件を復元")
         for source, collector in sources:
             saved, skipped = collector(source, storage, refresh=args.refresh)
             total_saved += saved
             total_skipped += skipped
             print(f"{source.name}: 新規 {saved} 件 / スキップ {skipped} 件")
+        # 収集結果を JSONL に書き戻す (git でコミットして永続化)
+        count = storage.export_jsonl(DEFAULT_JSONL_PATH)
     print(f"合計: 新規 {total_saved} 件 / スキップ {total_skipped} 件")
+    print(f"articles.jsonl へ {count} 件を書き出しました")
+    return 0
+
+
+def cmd_digest(args) -> int:
+    with Storage(args.db) as storage:
+        if args.stdout:
+            from .digest import build_digest
+
+            print(build_digest(storage, hours=args.hours))
+            return 0
+        path = write_digest(storage, hours=args.hours, out_dir=args.out_dir)
+        print(f"ダイジェストを書き出しました: {path}")
+    return 0
+
+
+def cmd_export(args) -> int:
+    with Storage(args.db) as storage:
+        count = storage.export_jsonl(args.path or DEFAULT_JSONL_PATH)
+        print(f"{count} 件を書き出しました")
+    return 0
+
+
+def cmd_import(args) -> int:
+    with Storage(args.db) as storage:
+        count = storage.import_jsonl(args.path or DEFAULT_JSONL_PATH)
+        print(f"{count} 件を取り込みました")
     return 0
 
 
@@ -115,6 +149,20 @@ def main(argv: list[str] | None = None) -> int:
         help="既存の記事も再取得して上書き更新する",
     )
     p.set_defaults(func=cmd_collect)
+
+    p = sub.add_parser("digest", help="新着記事のダイジェスト markdown を生成する")
+    p.add_argument("--hours", type=int, default=24, help="過去 N 時間の新着を対象 (既定: 24)")
+    p.add_argument("--out-dir", help="出力先ディレクトリ (既定: digests/)")
+    p.add_argument("--stdout", action="store_true", help="ファイルに書かず標準出力へ")
+    p.set_defaults(func=cmd_digest)
+
+    p = sub.add_parser("export", help="全記事を data/articles.jsonl に書き出す")
+    p.add_argument("--path", help="出力先 (既定: data/articles.jsonl)")
+    p.set_defaults(func=cmd_export)
+
+    p = sub.add_parser("import", help="data/articles.jsonl から記事を取り込む")
+    p.add_argument("--path", help="入力元 (既定: data/articles.jsonl)")
+    p.set_defaults(func=cmd_import)
 
     p = sub.add_parser("search", help="収集済み記事を全文検索する")
     p.add_argument("query", help="検索キーワード")
